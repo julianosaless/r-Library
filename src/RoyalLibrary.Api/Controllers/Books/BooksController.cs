@@ -17,7 +17,7 @@ namespace RoyalLibrary.Api.Controllers.Books
 
         // GET api/<BookController>
         ///<summary>
-        /// Get Tenant
+        /// Get Book
         ///</summary>
         ///<remarks>
         /// This endpoint will allow you to get all book information. You may pass URL parameters to these endpoints to navigate to get all  books.
