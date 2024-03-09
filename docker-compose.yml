@@ -1,0 +1,65 @@
+version: "3.6"
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server
+    environment:
+      SA_PASSWORD: "DB_password@123"
+      ACCEPT_EULA: "Y"
+    ports:
+      - "1433:1433"
+    expose:
+      - "1433"
+    volumes:
+      - ./backend/database:/scripts/
+
+    command:
+      - /bin/bash
+      - -c
+      - |
+        # Launch MSSQL and send to background
+        /opt/mssql/bin/sqlservr &
+        pid=$$!
+        # Wait for it to be available
+        echo "Waiting for MS SQL to be available ⏳"
+        /opt/mssql-tools/bin/sqlcmd -l 30 -S db -h-1 -V1 -U sa -P DB_password@123 -Q "SET NOCOUNT ON SELECT \"YAY WE ARE UP\" , @@servername"
+        is_up=$$?
+        while [ $$is_up -ne 0 ] ; do
+          echo -e $$(date)
+          /opt/mssql-tools/bin/sqlcmd -l 30 -S db -h-1 -V1 -U sa -P DB_password@123 -Q "SET NOCOUNT ON SELECT \"YAY WE ARE UP\" , @@servername"
+          is_up=$$?
+          sleep 5
+        done
+        # Run every script in /scripts
+        # TODO set a flag so that this is only done once on creation,
+        #      and not every time the container runs
+         /opt/mssql-tools/bin/sqlcmd -S db -U sa -P DB_password@123 -l 30 -e -i  ./scripts/structure.sql && /opt/mssql-tools/bin/sqlcmd -S db -U sa -P DB_password@123 -l 30 -e -i  ./scripts/seed.sql
+        echo "All scripts have been executed. Waiting for MS SQL(pid $$pid) to terminate."
+        # Wait on the sqlserver process
+        wait $$pidy
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ./src/RoyalLibrary.Api/Dockerfile
+    ports:
+    - "8081:80"
+    - "8082:443"
+    environment:
+        - ASPNETCORE_ENVIRONMENT=development
+        - ASPNETCORE_URLS=https://+:443;http://+:80
+        - ASPNETCORE_Kestrel__Certificates__Default__Password=Pass@*****
+        - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/docker.pfx
+    volumes:
+        - ./backend/certificate:/https/
+    depends_on:
+      - db
+
+  adminer:
+    image: adminer
+    restart: unless-stopped
+    ports:
+      - 8084:80
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    depends_on:
+      - db
